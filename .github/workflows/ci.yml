@@ -29,12 +29,11 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: package-lock.json
       - name: Install dependencies
-        run: cd app && npm ci
+        run: npm ci
       - name: Run unit tests
         run: |
-          cd app
           set -o pipefail
           npm test 2>&1 | tee test-output.txt
       - name: Upload artifacts
@@ -42,25 +41,17 @@ jobs:
         if: always()
         with:
           name: test-output-node-${{ matrix.node-version }}
-          path: app/test-output.txt
+          path: test-output.txt
 
   # Stage 2 : Build image Docker (Multi-stage)
   build:
     needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Docker Buildx
-        uses: ./.github/workflows/reusable-docker.yml
-      - name: Build Docker image
-        uses: ./.github/workflows/reusable-docker.yml
-        with:
-          image-name: devops-app
-          context: ./app
-          push: false # Simulation pour l'exercice
-          tags: devops-app:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+    uses: ./.github/workflows/reusable-docker.yml
+    with:
+      image-name: devops-app
+      context: .
+      dockerfile: Dockerfile
+    secrets: inherit
 
   # Stage 3 : Scan de sécurité (Trivy)
   security:
@@ -72,7 +63,7 @@ jobs:
         uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: 'fs'
-          scan-ref: 'app/'
+          scan-ref: '.'
           severity: 'HIGH,CRITICAL'
           exit-code: '1'
           format: 'table'
