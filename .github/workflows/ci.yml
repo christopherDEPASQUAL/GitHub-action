@@ -1,0 +1,107 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tools
+        uses: ./.github/actions/setup-tools
+        with:
+          install-terraform: 'true'
+  # Stage 1 : Tests (Vérifie la compatibilité sur 4 versions de Node)
+  test:
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+      - name: Install dependencies
+        run: cd app && npm ci
+      - name: Run unit tests
+        run: |
+          cd app
+          set -o pipefail
+          npm test 2>&1 | tee test-output.txt
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-output-node-${{ matrix.node-version }}
+          path: app/test-output.txt
+
+  # Stage 2 : Build image Docker (Multi-stage)
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: ./.github/workflows/reusable-docker.yml
+      - name: Build Docker image
+        uses: ./.github/workflows/reusable-docker.yml
+        with:
+          image-name: devops-app
+          context: ./app
+          push: false # Simulation pour l'exercice
+          tags: devops-app:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Stage 3 : Scan de sécurité (Trivy)
+  security:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan application files
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: 'fs'
+          scan-ref: 'app/'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1'
+          format: 'table'
+
+  # Stage 4 : Deploy (Simulé)
+  deploy:
+    needs: [build, security]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploying
+        run: echo "Deploying version ${{ github.sha }} to production environment..."
+
+    # Déploiements avec Environnements
+  deploy-staging:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - run: echo "Deploying to staging..."
+
+  deploy-production:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: |
+          echo "Deploying to production..."
+          echo "DB_PASSWORD length: ${#DB_PASSWORD}"
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
