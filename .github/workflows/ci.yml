@@ -60,13 +60,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Scan application files
-        uses: aquasecurity/trivy-action@v0.33.1
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
           scan-ref: '.'
           severity: 'HIGH,CRITICAL'
           exit-code: '1'
           format: 'table'
+          trivy-version: 'v0.64.3'
+          debug: true
 
   # Stage 4 : Deploy (Simulé)
   deploy:
