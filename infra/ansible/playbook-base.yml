@@ -1,0 +1,92 @@
+---
+- name: Configuration de base des serveurs
+  hosts: all
+  become: false
+  gather_facts: yes # On en a besoin pour ansible_hostname à la fin
+  
+  vars:
+    apt_mirror: "http://deb.debian.org/debian"
+    apt_security: "http://security.debian.org/debian-security"
+    packages:
+      - curl
+      - wget
+      - vim
+      - htop
+      - net-tools
+
+  pre_tasks:
+    - name: Nettoyer les sources APT conflictuelles (Debian Bookworm)
+      file:
+        path: /etc/apt/sources.list.d/debian.sources
+        state: absent
+
+    - name: Configurer des miroirs Debian robustes
+      copy:
+        dest: /etc/apt/sources.list
+        content: |
+          deb {{ apt_mirror }} bookworm main
+          deb {{ apt_mirror }} bookworm-updates main
+          deb {{ apt_security }} bookworm-security main
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Configurer le proxy APT (Seulement si nécessaire)
+      template:
+        dest: /etc/apt/apt.conf.d/01proxy
+        content: |
+          {% if proxy_url is defined %}
+          Acquire::http::Proxy "{{ proxy_url }}";
+          Acquire::https::Proxy "{{ proxy_url }}";
+          {% endif %}
+          Acquire::http::Pipeline-Depth "0";
+        mode: '0644'
+      # On utilise une variable externe 'proxy_url' plutôt que 'ansible_env'
+      # car c'est plus fiable lors du premier run.
+      when: proxy_url is defined
+
+  tasks:
+    - name: Mettre à jour le cache APT avec tolérance aux erreurs
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      register: apt_update_status
+      until: apt_update_status is success
+      retries: 5
+      delay: 10
+
+    - name: Installer les paquets de base
+      apt:
+        name: "{{ packages }}"
+        state: present
+      register: apt_install_status
+      until: apt_install_status is success
+      retries: 3
+      delay: 5
+
+    - name: Créer le répertoire d'application
+      file:
+        path: /opt/app
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Déployer le fichier .env de manière sécurisée
+      copy:
+        content: |
+          # Configuration de l'application (Générée par Ansible)
+          APP_ENV=production
+          APP_LOG_LEVEL=info
+          APP_PORT=3000
+        dest: /opt/app/.env
+        owner: root
+        group: root
+        mode: '0600' # Seul root peut lire le secret
+
+    - name: Rapport final
+      debug:
+        msg: 
+          - "Machine: {{ ansible_hostname }}"
+          - "Système: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "Statut: Configuration terminée avec succès."

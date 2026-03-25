@@ -1,0 +1,50 @@
+# services:
+#   node1:
+#     image: ubuntu:22.04
+#     container_name: ansible-node1
+#     command: sleep infinity
+#     networks:
+#       - ansible-net
+
+#   node2:
+#     image: ubuntu:22.04
+#     container_name: ansible-node2
+#     command: sleep infinity
+#     networks:
+#       - ansible-net
+
+# networks:
+#   ansible-net:
+#     name: ansible-net
+
+
+services:
+  # 1. Ton application Node.js
+  app:
+    build:
+      context: ../..
+      target: production
+    ports:
+      - "3000:3000"
+    networks:
+      - devops-net
+
+  # 2. Premier nœud pour Ansible (Cible 1)
+  ansible-node1:
+    image: python:3.12-slim-bookworm # Image avec Python déjà dedans, basée sur Debian stable
+    container_name: ansible-node1
+    command: sleep infinity # Pour que le conteneur reste allumé
+    networks:
+      - devops-net
+
+  # 3. Deuxième nœud pour Ansible (Cible 2)
+  ansible-node2:
+    image: python:3.12-slim-bookworm
+    container_name: ansible-node2
+    command: sleep infinity
+    networks:
+      - devops-net
+
+networks:
+  devops-net:
+    driver: bridge

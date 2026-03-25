@@ -1,4 +1,12 @@
 node_modules
-npm-debug.log
 .git
-.env
+.github
+*.md
+Dockerfile*
+docker-compose*
+.env*
+npm-debug.log
+pnpm-lock.yaml
+yarn.lock
+coverage
+dist
